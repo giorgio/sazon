@@ -8,6 +8,7 @@ lista de compras en paquetes enteros y detecta lo que sobra.
 from __future__ import annotations
 
 import json
+import re
 import math
 import time
 import unicodedata
@@ -58,6 +59,9 @@ class Receta(BaseModel):
     por_que_es_saludable: str
     busqueda_foto: str = Field(description="Búsqueda en INGLÉS para encontrar una foto del plato, 3 a 6 palabras")
     icono: str = Field(description="Uno de: " + ", ".join(ICONOS))
+    alergenos: list[str] = Field(default_factory=list, description=(
+        "Alérgenos comunes que contiene la receta, solo de esta lista: Gluten, Lácteos, Huevo, Maní, "
+        "Frutos secos, Soya, Pescado, Mariscos, Ajonjolí. Lista vacía si no tiene ninguno."))
 
 
 CATEGORIAS = ["Plato fuerte", "Sopas", "Ensaladas", "Desayunos", "Entradas", "Postres"]
@@ -158,6 +162,43 @@ def validar_busqueda(cocinas: list[str], personas: int, max_porcion: float, tiem
 # Costos (los calcula la app, no la IA)
 # ---------------------------------------------------------------------------
 
+# Alérgenos: lo que dice la IA + revisión por palabras en los ingredientes (por si la IA se olvida)
+ALERGENOS = {
+    "Gluten": r"\b(trigo|harina(?! de (maiz|arroz|yuca|platano|coco|almendra|garbanzo))|pan|panes|fideos?|"
+              r"spaghetti|espagueti|tallarin(es)?|macarron(es)?|lasana|pasta(?! de (tomate|aji|mani))|"
+              r"cebada|centeno|cuscus|galletas?|seitan|apanado|empanizado|pan rallado)\b",
+    "Lácteos": r"\b(leche(?! de (coco|almendras?|soya|soja|avena|arroz))|quesos?|quesillo|yogur|yogurt|"
+               r"crema de leche|nata|mantequilla(?! de mani)|requeson|suero de leche)\b",
+    "Huevo": r"\b(huevos?|claras?|yemas?|mayonesa)\b",
+    "Maní": r"\b(mani|cacahuates?|mantequilla de mani)\b",
+    "Frutos secos": r"\b(nuez|nueces|almendras?|avellanas?|pistachos?|anacardos?|maranon|castanas?)\b",
+    "Soya": r"\b(soya|soja|tofu|edamame|tempeh)\b",
+    "Pescado": r"\b(pescado|atun|sardinas?|tilapia|corvina|salmon|bacalao|albacora|picudo|dorado|merluza|"
+               r"trucha|anchoas?)\b",
+    "Mariscos": r"\b(camaron(es)?|langostinos?|conchas?|mejillon(es)?|calamar(es)?|pulpo|cangrejos?|almejas?|"
+                r"mariscos?|jaiba)\b",
+    "Ajonjolí": r"\b(ajonjoli|sesamo|tahini|tahin)\b",
+}
+
+
+def detectar_alergenos(r: Receta) -> list[str]:
+    texto = " ".join(_clave(i.nombre) for i in r.ingredientes)
+    encontrados = {a for a, patron in ALERGENOS.items() if re.search(patron, texto)}
+    por_clave = {_clave(a): a for a in ALERGENOS}
+    encontrados |= {por_clave[_clave(x)] for x in (r.alergenos or []) if _clave(x) in por_clave}
+    return [a for a in ALERGENOS if a in encontrados]
+
+
+NO_PERMITIDO = {"Vegana": {"Lácteos", "Huevo", "Pescado", "Mariscos"},
+                "Vegetariana": {"Huevo", "Pescado", "Mariscos"},
+                "Ovolactovegetariana": {"Pescado", "Mariscos"}}
+
+
+def cumple_dieta(r: Receta, dieta: str) -> bool:
+    """Segunda revisión: descarta recetas que la IA marcó de una dieta pero traen algo prohibido."""
+    return not (NO_PERMITIDO.get(dieta, set()) & set(r.alergenos or []))
+
+
 def limpiar_receta(r: Receta) -> Receta:
     """Corrige datos imposibles que a veces devuelve la IA."""
     r.porciones = max(1, int(r.porciones or 1))
@@ -169,6 +210,7 @@ def limpiar_receta(r: Receta) -> Receta:
         i.fraccion_usada = min(1.0, max(0.0, float(i.fraccion_usada or 0)))
         buenos.append(i)
     r.ingredientes = buenos
+    r.alergenos = detectar_alergenos(r)
     if r.icono not in ICONOS:
         r.icono = "otro"
     return r
@@ -288,6 +330,9 @@ def buscar_recetas(cliente, cocinas, personas, max_porcion, tiempo, tipos=(), ci
     for r in cat.recetas:
         r = ajustar_porciones(limpiar_receta(r), personas)
         if not r.ingredientes or not r.pasos:
+            descartadas += 1
+            continue
+        if not cumple_dieta(r, dieta):
             descartadas += 1
             continue
         if costo_porcion(r) > max_porcion * 1.1:  # 10 % de tolerancia por redondeo

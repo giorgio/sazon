@@ -168,6 +168,9 @@ def ver_receta(r):
         st.markdown(f"{i}. {p}")
     st.caption(f"Dificultad: {r.dificultad}")
     st.info("💚 " + r.por_que_es_saludable)
+    if r.alergenos:
+        st.warning("⚠️ **Alérgenos:** " + ", ".join(r.alergenos) + ". Es una estimación: si tienes alergias, "
+                   "revisa la etiqueta de cada producto.")
     if st.button("Atrás", icon=":material/arrow_back:", key=f"cerrar_{r.nombre}", width="stretch"):
         st.rerun()                                              # cierra la receta
 
