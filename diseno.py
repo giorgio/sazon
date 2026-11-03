@@ -83,6 +83,7 @@ header[data-testid="stHeader"] {{ background: transparent; }}
 [data-testid="stDialog"] button[aria-label="Close"]:hover {{ filter:brightness(1.1); }}
 .sz-alergia {{ display:inline-block; font-size:.78rem; font-weight:700; color:#7A4A00; background:#FCEBC4;
   border:1px solid #E9C46A; border-radius:8px; padding:.15rem .55rem; margin:.1rem 0 .35rem; }}
+.sz-chip.barata {{ color:#fff; background:#5E6B3A; }}
 .sz-chip.gris {{ color:{GRIS}; background:#F1ECE8; font-weight:600; }}
 .sz-nombre {{ font-size:1.2rem; font-weight:800; letter-spacing:-.02em; color:{TEXTO}; line-height:1.2; margin:.1rem 0 .3rem; }}
 .sz-desc {{ font-size:.92rem; color:{GRIS}; line-height:1.45; margin:0 0 .7rem; min-height:2.7em; }}
@@ -242,12 +243,14 @@ def precios_tarjeta(por_porcion, total, personas) -> str:
     if total is None:
         return html_p
     return (f'<div class="sz-precios">{html_p}'
-            f'<div class="sz-precio total"><b>${total:.2f}</b><span>comida para {personas}</span></div></div>')
+            f'<div class="sz-precio total"><b>${total:.2f}</b><span>todos los ingredientes</span></div></div>')
 
 
 def info_receta(r, por_porcion: float | None = None, total: float | None = None, personas: int | None = None):
     chips = [f'<span class="sz-chip">{html.escape(r.cocina)}</span>',
              f'<span class="sz-chip gris">{r.tiempo_minutos} min</span>']
+    if por_porcion is not None and por_porcion <= 1.00:
+        chips.insert(0, '<span class="sz-chip barata">💰 Económica</span>')
     chips += [f'<span class="sz-chip gris">{html.escape(e)}</span>' for e in r.etiquetas[:2]]
     st.markdown(
         f'<div class="sz-chips">{"".join(chips)}</div>'
@@ -271,7 +274,7 @@ def costos(por_porcion: float, total: float, personas: int):
     gente = "1 persona" if personas == 1 else f"{personas} personas"
     st.markdown(
         f'<div class="sz-costos"><div class="sz-costo"><small>Por porción</small><b>${por_porcion:.2f}</b></div>'
-        f'<div class="sz-costo total"><small>Toda la comida ({gente})</small><b>${total:.2f}</b></div></div>',
+        f'<div class="sz-costo total"><small>Todos los ingredientes ({gente})</small><b>${total:.2f}</b></div></div>',
         unsafe_allow_html=True,
     )
 

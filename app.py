@@ -149,9 +149,7 @@ def ver_receta(r):
         st.session_state["personas"] = personas
         rp = n.ajustar_porciones(r, personas)
         compras = n.compras_receta(rp)
-        d.costos(n.costo_porcion(rp), n.costo_receta(rp), personas)
-        st.caption(f"Comprar los productos completos cuesta ${compras['total']:.2f}; "
-                   "lo que no uses te sirve para otras comidas.")
+        d.costos(n.costo_porcion(rp), compras["total"], personas)
         ya = en_menu(r)
         st.button("Quitar de mi semana" if ya else f"Agregar a mi semana (para {personas})",
                   icon=":material/remove:" if ya else ":material/add:", on_click=alternar_menu, args=(rp,),
@@ -180,7 +178,7 @@ def tarjeta(r, clave: str):
         mostrar_foto(r)
         personas = st.session_state["personas"]
         rp = n.ajustar_porciones(r, personas)
-        d.info_receta(r, n.costo_porcion(rp), n.costo_receta(rp), personas)
+        d.info_receta(r, n.costo_porcion(rp), n.compras_receta(rp)["total"], personas)
         if st.button("Ver receta", key=f"ver_{clave}", icon=":material/menu_book:", type="primary", width="stretch"):
             ver_receta(r)
         with st.container(key=f"en_menu_{clave}" if en_menu(r) else f"fuera_{clave}"):
@@ -233,7 +231,7 @@ def pagina_inicio():
             with c2:
                 personas = st.session_state["personas"]
                 rp = n.ajustar_porciones(r, personas)
-                d.info_receta(r, n.costo_porcion(rp), n.costo_receta(rp), personas)
+                d.info_receta(r, n.costo_porcion(rp), n.compras_receta(rp)["total"], personas)
                 if st.button("Ver receta", key="ver_sugerida", icon=":material/menu_book:", type="primary",
                              width="stretch"):
                     ver_receta(r)
@@ -250,7 +248,7 @@ def pagina_pais():
     cocina = n.PAISES[pais]
     boton_atras()
     d.titulo(f"Cocina de {pais}" if pais not in ("Mediterráneo", "Medio Oriente") else f"Cocina del {pais}",
-             f"{pais}.", "Ordenadas de la más barata a la más cara. Abre una para calcularla para tu familia.")
+             f"{pais}.", "Primero las más baratas: las marcadas 💰 Económica cuestan $1 o menos por porción.")
     cat = st.segmented_control("Tipo de plato", n.CATEGORIAS, default=s["categoria"], key="cat_sel",
                                label_visibility="collapsed", width="stretch")
     if cat:

@@ -64,6 +64,13 @@ class Receta(BaseModel):
         "Frutos secos, Soya, Pescado, Mariscos, Ajonjolí. Lista vacía si no tiene ninguno."))
 
 
+ECONOMICA = 1.00   # USD por porción: desde aquí abajo la receta se marca como "Económica"
+
+
+def es_economica(por_porcion: float) -> bool:
+    return por_porcion <= ECONOMICA
+
+
 CATEGORIAS = ["Plato fuerte", "Sopas", "Ensaladas", "Desayunos", "Entradas", "Postres"]
 DESCRIPCION_CATEGORIA = {
     "Plato fuerte": "plato principal de almuerzo o merienda, con proteína y acompañante",
@@ -124,6 +131,9 @@ REGLAS
    libra de arveja o habas tiernas 1.00-1.50. Los granos secos y legumbres en funda de supermercado
    (fréjol, lenteja, garbanzo) casi siempre cuestan más de 1 USD la funda.
 5. Con esos precios reales, el costo por porción debería quedar en {max_porcion:.2f} USD o menos.
+   PRIORIZA INGREDIENTES BARATOS de mercado ecuatoriano: arroz, papa, yuca, verde, maduro, choclo, fréjol,
+   lenteja, arveja, huevo, pollo, atún, avena, zanahoria, col, tomate y frutas de temporada. Al menos la
+   mitad de las recetas debe costar menos de {economica:.2f} USD por porción.
 6. Marca sal, pimienta, aceite y condimentos secos como basico_de_despensa.
 7. Pasos cortos (máximo 8), pensados para alguien que cocina poco.
 8. Calorías y proteína son aproximadas por porción."""
@@ -317,7 +327,7 @@ def buscar_recetas(cliente, cocinas, personas, max_porcion, tiempo, tipos=(), ci
                    excluir=(), sobrantes=(), cantidad=RECETAS_POR_BUSQUEDA, categoria="", dieta="Todas"):
     """Devuelve (recetas dentro del presupuesto ordenadas por precio, cuántas se descartaron)."""
     prompt = PROMPT_RECETAS.format(
-        n=cantidad, cocinas=", ".join(cocinas), personas=personas, max_porcion=max_porcion,
+        n=cantidad, economica=ECONOMICA, cocinas=", ".join(cocinas), personas=personas, max_porcion=max_porcion,
         tiempo=tiempo, tipos=", ".join(tipos) or "cualquiera", ciudad=ciudad or "Guayaquil",
         excluir=", ".join(excluir) or "ninguna",
         categoria=(f"- Categoría: {categoria}. TODAS las recetas deben ser de esta categoría "
