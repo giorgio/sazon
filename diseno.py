@@ -8,12 +8,21 @@ import html
 
 import streamlit as st
 
-TERRA = "#B5482A"        # color principal
+TERRA = "#B5482A"        # color principal (logo, precios)
+BOTON = "#AD5F38"        # terracota arcilla para botones: menos rojo
 TERRA_CLARO = "#F7E6DE"
 TEXTO = "#2A1F1A"
 GRIS = "#7D6F68"
 BORDE = "#EADFD8"
 FONDO = "#F7F4F1"
+
+# Tonos terrosos que combinan con el terracota, para los botones de país (fondo, texto). Alternan oscuro/claro.
+TONOS = [("#5E6B3A", "#FFFFFF"),   # oliva
+         ("#E0B04A", TEXTO),       # mostaza
+         ("#2F5D62", "#FFFFFF"),   # azul petróleo
+         ("#A8BFA0", TEXTO),       # salvia
+         ("#3E5A7A", "#FFFFFF"),   # azul tierra
+         ("#D9956A", TEXTO)]       # arcilla
 
 # Isotipo de sazón.: la S baja y se convierte en un plato hondo servido.
 ISOTIPO = ("M29.6 9.6 C29.6 6.1 26.8 3.6 23.3 3.6 C19.7 3.6 16.9 6.2 16.9 9.5 C16.9 13 19.6 16.6 23.4 16.6 "
@@ -24,6 +33,11 @@ def isotipo_svg(color: str = "#fff", tam: int = 28) -> str:
     return (f'<svg width="{tam}" height="{tam}" viewBox="0 0 48 48" fill="none" stroke="{color}" stroke-width="3.6" '
             f'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{ISOTIPO}"/></svg>')
 
+
+TONOS_CSS = "\n".join(
+    f'.st-key-paises [class*="st-key-tono{i}_"] button {{ background:{fondo} !important; border:none !important; '
+    f'color:{texto} !important; }} .st-key-paises [class*="st-key-tono{i}_"] button p {{ color:{texto} !important; }}'
+    for i, (fondo, texto) in enumerate(TONOS))
 
 CSS = f"""
 <style>
@@ -66,6 +80,8 @@ header[data-testid="stHeader"] {{ background: transparent; }}
 .sz-nombre {{ font-size:1.2rem; font-weight:800; letter-spacing:-.02em; color:{TEXTO}; line-height:1.2; margin:.1rem 0 .3rem; }}
 .sz-desc {{ font-size:.92rem; color:{GRIS}; line-height:1.45; margin:0 0 .7rem; min-height:2.7em; }}
 .sz-precio b {{ display:block; font-size:1.75rem; font-weight:800; color:{TERRA}; letter-spacing:-.03em; line-height:1.1; }}
+.sz-precio-total {{ font-size:.92rem; color:{GRIS}; margin:.15rem 0 .2rem; }}
+.sz-precio-total b {{ color:{TERRA}; font-weight:800; }}
 .sz-precio span {{ display:block; font-size:.86rem; color:{GRIS}; margin-top:.1rem; }}
 [class*="st-key-rc_"] .stButton {{ margin-top:-.2rem; }}
 .sz-nutri {{ font-size:.82rem; color:{GRIS}; margin:.2rem 0 .7rem; }}
@@ -73,20 +89,26 @@ header[data-testid="stHeader"] {{ background: transparent; }}
 .sz-credito a {{ color:{GRIS}; }}
 [class*="st-key-en_menu_"] button {{ background:{TERRA_CLARO}; border-color:{TERRA_CLARO}; color:{TERRA}; }}
 
-/* Todo en terracota: botones secundarios con borde y texto terracota */
+/* Botones en terracota arcilla (no rojo) */
+.stButton button[kind="primary"], [data-testid="stFormSubmitButton"] button {{ background:{BOTON} !important;
+  border-color:{BOTON} !important; color:#fff !important; }}
+.stButton button[kind="primary"]:hover, [data-testid="stFormSubmitButton"] button:hover {{ background:#96502E !important;
+  border-color:#96502E !important; }}
 .stButton button[kind="secondary"], [data-testid="stDownloadButton"] button, [data-testid="stLinkButton"] a {{
-  border-color:{TERRA}; color:{TERRA}; }}
+  border-color:{BOTON}; color:{BOTON}; }}
 .stButton button[kind="secondary"]:hover, [data-testid="stDownloadButton"] button:hover,
-[data-testid="stLinkButton"] a:hover {{ background:{TERRA_CLARO}; border-color:{TERRA}; color:{TERRA}; }}
+[data-testid="stLinkButton"] a:hover {{ background:{TERRA_CLARO}; border-color:{BOTON}; color:{BOTON}; }}
 
 /* Inicio: receta sugerida y países */
 .st-key-sugerida {{ background:#fff; border-radius:22px !important; padding:1.4rem !important; border-color:{BORDE} !important; }}
 .st-key-sugerida [data-testid="stImage"] img {{ border-radius:16px; aspect-ratio:4/3; object-fit:cover; width:100%; }}
 .sz-ceja-terra {{ color:{TERRA}; }}
 .sz-seccion {{ font-size:1.35rem; font-weight:800; letter-spacing:-.02em; color:{TEXTO}; margin:1.2rem 0 .8rem; }}
+{TONOS_CSS}
+.st-key-paises button:hover {{ filter:brightness(.92); }}
 .st-key-paises button {{ aspect-ratio:1 / 1; width:100%; height:auto; min-height:0 !important; border-radius:18px; }}
 .st-key-paises button p {{ font-size:1.15rem !important; font-weight:700; text-align:center; }}
-.st-key-volver button {{ border:none; background:transparent; padding-left:0; color:{TERRA}; }}
+.st-key-volver button {{ border:none; background:transparent; padding-left:0; color:{BOTON}; }}
 
 .st-key-menu .stButton button {{ border:none !important; }}
 .st-key-menu .st-key-nav_on button {{ color:{TEXTO} !important; background:{TERRA_CLARO} !important; }}
@@ -100,7 +122,7 @@ header[data-testid="stHeader"] {{ background: transparent; }}
 .sz-costo {{ flex:1; background:{TERRA_CLARO}; border-radius:14px; padding:.8rem 1rem; }}
 .sz-costo small {{ color:{GRIS}; font-size:.82rem; }}
 .sz-costo b {{ display:block; color:{TERRA}; font-size:1.7rem; font-weight:800; letter-spacing:-.03em; }}
-.sz-costo.total {{ background:{TERRA}; }}
+.sz-costo.total {{ background:{BOTON}; }}
 .sz-costo.total small, .sz-costo.total b {{ color:#fff; }}
 
 /* Resumen de la semana */
@@ -204,7 +226,7 @@ def credito_foto(foto: dict):
     )
 
 
-def info_receta(r, por_porcion: float | None = None):
+def info_receta(r, por_porcion: float | None = None, total: float | None = None, personas: int | None = None):
     chips = [f'<span class="sz-chip">{html.escape(r.cocina)}</span>',
              f'<span class="sz-chip gris">{r.tiempo_minutos} min</span>']
     chips += [f'<span class="sz-chip gris">{html.escape(e)}</span>' for e in r.etiquetas[:2]]
@@ -213,6 +235,8 @@ def info_receta(r, por_porcion: float | None = None):
         f'<div class="sz-nombre">{html.escape(r.nombre)}</div>'
         f'<p class="sz-desc">{html.escape(r.descripcion)}</p>'
         + (f'<div class="sz-precio"><b>${por_porcion:.2f}</b><span>por porción</span></div>' if por_porcion is not None else "")
+        + (f'<div class="sz-precio-total"><b>${total:.2f}</b> toda la comida para '
+           f'{"1 persona" if personas == 1 else f"{personas} personas"}</div>' if total is not None else "")
         +         f'<div class="sz-nutri">~{r.calorias_por_porcion} kcal · {r.proteina_g_por_porcion} g de proteína por porción</div>',
         unsafe_allow_html=True,
     )
@@ -228,6 +252,15 @@ def costos(por_porcion: float, total: float, personas: int):
     gente = "1 persona" if personas == 1 else f"{personas} personas"
     st.markdown(
         f'<div class="sz-costos"><div class="sz-costo"><small>Por porción</small><b>${por_porcion:.2f}</b></div>'
-        f'<div class="sz-costo total"><small>Toda la receta ({gente})</small><b>${total:.2f}</b></div></div>',
+        f'<div class="sz-costo total"><small>Toda la comida ({gente})</small><b>${total:.2f}</b></div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def costo_compras(total: float, personas: int):
+    gente = "1 persona" if personas == 1 else f"{personas} personas"
+    st.markdown(
+        f'<div class="sz-costos"><div class="sz-costo total"><small>Costo de los productos para {gente}</small>'
+        f'<b>${total:.2f}</b></div></div>',
         unsafe_allow_html=True,
     )

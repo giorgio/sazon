@@ -60,6 +60,26 @@ class Receta(BaseModel):
     icono: str = Field(description="Uno de: " + ", ".join(ICONOS))
 
 
+CATEGORIAS = ["Plato fuerte", "Sopas", "Ensaladas", "Desayunos", "Entradas", "Postres"]
+DESCRIPCION_CATEGORIA = {
+    "Plato fuerte": "plato principal de almuerzo o merienda, con proteína y acompañante",
+    "Sopas": "sopas, caldos, cremas o locros",
+    "Ensaladas": "ensaladas completas o de acompañante, frescas",
+    "Desayunos": "desayunos o meriendas ligeras",
+    "Entradas": "entradas, piqueos o bocaditos para compartir",
+    "Postres": "postres sanos, con fruta y poco azúcar",
+}
+
+
+DIETAS = {
+    "Todas": "",
+    "Vegana": "VEGANA: nada de origen animal (sin carne, pescado, mariscos, huevo, lácteos ni miel)",
+    "Vegetariana": "VEGETARIANA: sin carne, pollo, pescado ni mariscos; puede llevar lácteos, sin huevo",
+    "Ovolactovegetariana": "OVOLACTOVEGETARIANA: sin carne, pollo, pescado ni mariscos; sí huevo y lácteos",
+    "Pescetariana": "PESCETARIANA: sin carne roja ni pollo; sí pescado, mariscos, huevo y lácteos",
+}
+
+
 class Catalogo(BaseModel):
     recetas: list[Receta]
 
@@ -84,7 +104,7 @@ PEDIDO
 - Costo máximo por porción: {max_porcion:.2f} USD
 - Tiempo máximo: {tiempo} minutos
 - Tipo: {tipos}
-- Ciudad: {ciudad}
+{categoria}{dieta}- Ciudad: {ciudad}
 - No repitas estas recetas: {excluir}
 {extra}
 REGLAS
@@ -93,11 +113,16 @@ REGLAS
 2. Saludables: con verduras o legumbres, sin frituras profundas, poco azúcar y porciones razonables.
 3. Para cada ingrediente: la presentación en que se vende en Ecuador, su precio estimado completo y
    'fraccion_usada' = qué parte de esa presentación usa la receta (0.5 = la mitad).
-4. La suma de precio_presentacion_usd x fraccion_usada, dividida para {personas}, debe ser
-   MENOR O IGUAL a {max_porcion:.2f} USD.
-5. Marca sal, pimienta, aceite y condimentos secos como basico_de_despensa.
-6. Pasos cortos (máximo 8), pensados para alguien que cocina poco.
-7. Calorías y proteína son aproximadas por porción."""
+4. PRECIOS HONESTOS: precio_presentacion_usd es lo que cuesta HOY el paquete completo en un supermercado
+   ecuatoriano (2026). NUNCA bajes un precio para que la receta entre en el presupuesto: si no alcanza,
+   elige otra receta u otro ingrediente más barato. Referencias reales de 2026 (mercados): libra de pollo
+   ~1.40; cubeta de 30 huevos ~4.10; libra de queso de mesa 3.00-4.00; choclo 0.40-0.60 c/u;
+   libra de arveja o habas tiernas 1.00-1.50. Los granos secos y legumbres en funda de supermercado
+   (fréjol, lenteja, garbanzo) casi siempre cuestan más de 1 USD la funda.
+5. Con esos precios reales, el costo por porción debería quedar en {max_porcion:.2f} USD o menos.
+6. Marca sal, pimienta, aceite y condimentos secos como basico_de_despensa.
+7. Pasos cortos (máximo 8), pensados para alguien que cocina poco.
+8. Calorías y proteína son aproximadas por porción."""
 
 EXTRA_SOBRANTES = """- PRIORIDAD: usa estos ingredientes que le sobraron al usuario esta semana: {sobrantes}.
   Cada receta debe usar al menos uno de ellos."""
@@ -178,6 +203,8 @@ def tabla_ingredientes(r: Receta) -> list[dict]:
         "Ingrediente": i.nombre,
         "Cantidad": i.cantidad,
         "Se compra": i.presentacion,
+        "Precio del paquete": round(i.precio_presentacion_usd, 2),
+        "Usas": f"{min(i.fraccion_usada, 1):.0%}" if i.fraccion_usada < 1 else "todo",
         "Costo en la receta": costo_ingrediente(i),
         "Despensa": "Sí" if i.basico_de_despensa else "",
     } for i in r.ingredientes]
@@ -245,12 +272,15 @@ def llamar_gemini(cliente, prompt: str, esquema, modelos=(MODELO_PRINCIPAL, MODE
 
 
 def buscar_recetas(cliente, cocinas, personas, max_porcion, tiempo, tipos=(), ciudad="Guayaquil",
-                   excluir=(), sobrantes=(), cantidad=RECETAS_POR_BUSQUEDA):
+                   excluir=(), sobrantes=(), cantidad=RECETAS_POR_BUSQUEDA, categoria="", dieta="Todas"):
     """Devuelve (recetas dentro del presupuesto ordenadas por precio, cuántas se descartaron)."""
     prompt = PROMPT_RECETAS.format(
         n=cantidad, cocinas=", ".join(cocinas), personas=personas, max_porcion=max_porcion,
         tiempo=tiempo, tipos=", ".join(tipos) or "cualquiera", ciudad=ciudad or "Guayaquil",
         excluir=", ".join(excluir) or "ninguna",
+        categoria=(f"- Categoría: {categoria}. TODAS las recetas deben ser de esta categoría "
+                   f"({DESCRIPCION_CATEGORIA.get(categoria, categoria)}).\n") if categoria else "",
+        dieta=(f"- Dieta OBLIGATORIA, revisa cada ingrediente: {DIETAS[dieta]}.\n") if DIETAS.get(dieta) else "",
         extra=EXTRA_SOBRANTES.format(sobrantes=", ".join(sobrantes)) if sobrantes else "",
     )
     cat, _ = llamar_gemini(cliente, prompt, Catalogo, razonamiento="minimal")
@@ -309,6 +339,19 @@ def lista_de_compras(recetas: list[Receta]) -> dict:
         "total": round(sum(f["Precio"] for f in comprar), 2),
         "despensa_total": round(sum(f["Precio"] for f in despensa), 2),
     }
+
+
+def compras_receta(r: Receta) -> dict:
+    """Lo que hay que comprar para una receta: cada producto en paquetes enteros, con su precio."""
+    comprar, despensa = [], []
+    for i in r.ingredientes:
+        paquetes = max(1, math.ceil(round(i.fraccion_usada, 3) - 1e-9))
+        fila = {"Producto": i.nombre, "Para la receta": i.cantidad,
+                "Compras": f"{paquetes} × {i.presentacion}",
+                "Precio": round(paquetes * i.precio_presentacion_usd, 2)}
+        (despensa if i.basico_de_despensa else comprar).append(fila)
+    return {"comprar": comprar, "despensa": despensa,
+            "total": round(sum(f["Precio"] for f in comprar), 2)}
 
 
 def costo_menu(recetas: list[Receta]) -> float:
